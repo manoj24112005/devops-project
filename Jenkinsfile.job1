@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY = 'ghcr.io'
+        IMAGE_NAME = 'manoj24112005/devops-project'
+        GHCR_CREDS = credentials('ghcr-token')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    def shortCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.IMAGE_TAG = "v${BUILD_NUMBER}-${shortCommit}"
+                    echo "Generated Image Tag: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                bat 'python -m pytest tests/'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                bat "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('GHCR Login & Push') {
+            steps {
+                bat "echo %GHCR_CREDS_PSW% | docker login ${REGISTRY} -u %GHCR_CREDS_USR% --password-stdin"
+                bat "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+            }
+        }
+
+        stage('Trigger Job 2') {
+            steps {
+                echo "Triggering Job 2 (devops-project-job2) with IMAGE_TAG=${IMAGE_TAG}"
+                build job: 'devops-project-job2', parameters: [string(name: 'IMAGE_TAG', value: env.IMAGE_TAG)], wait: true
+            }
+        }
+    }
+
+    post {
+        always {
+            bat "docker logout ${REGISTRY}"
+        }
+    }
+}
