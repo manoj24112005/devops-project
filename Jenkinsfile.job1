@@ -1,0 +1,35 @@
+// JOB 1: test -> build image -> push to GHCR -> trigger Job 2
+pipeline {
+  agent any
+  environment {
+    GHCR_USER = 'YOUR_GITHUB_USERNAME'      // <-- edit
+    REPO      = 'YOUR_REPO_NAME'            // <-- edit (lowercase)
+  }
+  stages {
+    stage('Checkout') { steps { checkout scm } }
+    stage('Test') {
+      steps {
+        sh 'python3 -m venv .venv && . .venv/bin/activate && pip install -r app/requirements.txt && pytest -q'
+      }
+    }
+    stage('Build image') {
+      steps {
+        script {
+          env.TAG = "v${env.BUILD_NUMBER}-" + sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+        }
+        sh 'docker build --build-arg APP_VERSION=$TAG -t ghcr.io/$GHCR_USER/$REPO:$TAG .'
+      }
+    }
+    stage('Push to GHCR') {
+      steps {
+        withCredentials([string(credentialsId: 'ghcr-token', variable: 'GHCR_TOKEN')]) {
+          sh 'echo $GHCR_TOKEN | docker login ghcr.io -u $GHCR_USER --password-stdin'
+          sh 'docker push ghcr.io/$GHCR_USER/$REPO:$TAG'
+        }
+      }
+    }
+    stage('Trigger Job 2') {
+      steps { build job: 'job2-deploy', parameters: [string(name: 'IMAGE_TAG', value: env.TAG)], wait: false }
+    }
+  }
+}

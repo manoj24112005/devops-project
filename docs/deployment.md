@@ -1,0 +1,1 @@
+Terraform creates a security group (22 from your IP, 5000 open) and a t2.micro Ubuntu EC2. user-data installs docker.io. `scripts/deploy.sh` waits for Docker over SSH, logs in to GHCR (token via stdin), pulls the tagged image, runs it on port 5000 and checks /health.

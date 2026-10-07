@@ -1,0 +1,1 @@
+See the Troubleshooting section in README.md. Useful commands: `docker ps`, `docker logs app`, `terraform plan`, `ssh -i key.pem ubuntu@<ip>`, `cloud-init status` (on EC2, to see if user-data finished).

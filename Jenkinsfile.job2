@@ -1,0 +1,36 @@
+// JOB 2: terraform init/validate/plan/apply -> EC2 (user-data installs Docker) -> deploy image from GHCR
+pipeline {
+  agent any
+  parameters {
+    string(name: 'IMAGE_TAG', description: 'Tag produced by Job 1 (use an older tag to roll back)')
+  }
+  environment {
+    GHCR_USER   = 'YOUR_GITHUB_USERNAME'    // <-- edit
+    GITHUB_REPO = 'YOUR_REPO_NAME'          // <-- edit (lowercase)
+  }
+  stages {
+    stage('Checkout') { steps { checkout scm } }
+    stage('Terraform') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY'),
+                         file(credentialsId: 'tfvars-file', variable: 'TFVARS')]) {
+          dir('terraform') {
+            sh 'terraform init'
+            sh 'terraform validate'
+            sh 'terraform plan -var-file=$TFVARS'
+            sh 'terraform apply -auto-approve -var-file=$TFVARS'
+            script { env.EC2_IP = sh(script: 'terraform output -raw public_ip', returnStdout: true).trim() }
+          }
+        }
+      }
+    }
+    stage('Deploy image + health check') {
+      steps {
+        withCredentials([string(credentialsId: 'ghcr-token', variable: 'GHCR_TOKEN'),
+                         sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+          sh './scripts/deploy.sh $EC2_IP $IMAGE_TAG'
+        }
+      }
+    }
+  }
+}
