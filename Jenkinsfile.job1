@@ -4,7 +4,7 @@ pipeline {
     environment {
         REGISTRY = 'ghcr.io'
         IMAGE_NAME = 'manoj24112005/devops-project'
-        GHCR_CREDS = credentials('ghcr-token')
+        GHCR_CREDS = credentials('github-token')
     }
 
     stages {
@@ -12,7 +12,10 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    def shortCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    def shortCommit = bat(script: "@git rev-parse --short HEAD", returnStdout: true).trim()
+                    // Extract commit hash if bat output contains echo
+                    def lines = shortCommit.split('\n')
+                    shortCommit = lines[lines.length - 1].trim()
                     env.IMAGE_TAG = "v${BUILD_NUMBER}-${shortCommit}"
                     echo "Generated Image Tag: ${env.IMAGE_TAG}"
                 }

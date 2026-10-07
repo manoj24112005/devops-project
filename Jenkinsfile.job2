@@ -8,10 +8,7 @@ pipeline {
     environment {
         REGISTRY = 'ghcr.io'
         IMAGE_NAME = 'manoj24112005/devops-project'
-        GHCR_CREDS = credentials('ghcr-token')
-        SSH_KEY = credentials('ec2-ssh-key')
-        AWS_ACCESS_KEY_ID = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        GHCR_CREDS = credentials('github-token')
     }
 
     stages {
@@ -28,9 +25,9 @@ pipeline {
                     bat 'terraform validate'
                     bat 'terraform apply -auto-approve'
                     script {
-                        def ip = bat(script: 'terraform output -raw ec2_public_ip', returnStdout: true).trim()
-                        // Extract IP line if bat output includes extra command text
-                        env.EC2_IP = ip.substring(ip.lastIndexOf('\n') + 1).trim()
+                        def ipOutput = bat(script: '@terraform output -raw ec2_public_ip', returnStdout: true).trim()
+                        def lines = ipOutput.split('\n')
+                        env.EC2_IP = lines[lines.length - 1].trim()
                         echo "Target EC2 Public IP: ${env.EC2_IP}"
                     }
                 }
@@ -41,7 +38,7 @@ pipeline {
             steps {
                 script {
                     echo "Deploying ${REGISTRY}/${IMAGE_NAME}:${params.IMAGE_TAG} to EC2 (${env.EC2_IP})"
-                    // Remote execution over SSH using ssh or plink / ssh-agent
+                    
                     def deployScript = """
                         set -e
                         sudo systemctl start docker || true
@@ -56,9 +53,8 @@ pipeline {
                         curl -f http://localhost:5000/health
                     """
                     
-                    // Write remote script and execute via ssh
                     writeFile file: 'deploy_remote.sh', text: deployScript
-                    bat "ssh -o StrictHostKeyChecking=no -i %SSH_KEY% ubuntu@%EC2_IP% 'bash -s' < deploy_remote.sh"
+                    bat "ssh -o StrictHostKeyChecking=no -i devops-project-key.pem ubuntu@%EC2_IP% \"bash -s\" < deploy_remote.sh"
                 }
             }
         }
